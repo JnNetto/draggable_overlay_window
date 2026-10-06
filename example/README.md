@@ -1,19 +1,18 @@
 # Draggable Overlay Window Example
 
-This example demonstrates all the features of the `draggable_overlay_window` package.
+The example app demonstrates the package features and includes an animation gallery for comparing transition styles.
 
 ## Features Demonstrated
 
-- Multiple draggable windows
-- Resizable windows
-- Minimize and restore functionality
-- Focus management with z-index
-- Custom styling and colors
-- Event callbacks
-- Programmatic control via controllers
-- State preservation when minimized
+- Multiple draggable windows with focus and z-order management
+- Resizing on both axes or on width or height alone
+- Minimize, restore, maximize, and unmaximize actions
+- Headerless windows controlled through `DraggableWindowController`
+- Window-specific animations for open, close, minimize, restore, maximize, and unmaximize
+- An animation gallery with Fade, Zoom, Zoom from Corner, Elastic, Rectangle, Fast, and No Animation presets
+- Custom styling, callbacks, and content state preservation while minimized
 
-## Running the Example
+## Run the Example
 
 ```bash
 cd example
@@ -21,17 +20,13 @@ flutter pub get
 flutter run
 ```
 
-## What to Try
+## Try the Animation Gallery
 
-1. **Drag Windows** - Click and drag the header to move windows
-2. **Resize** - Drag edges or corners to resize
-3. **Minimize/Restore** - Double-click the header or use the buttons
-4. **Focus** - Click on a window to bring it to the front
-5. **Interact** - Use the buttons and counters to see state preservation
+Scroll to **Galeria de animações** and open one or more presets. Each button creates a separate window with its own `DraggableWindowAnimations` configuration. The windows open in staggered positions so they can remain visible together.
+
+Use each window's header controls to compare close, minimize/restore, and maximize/unmaximize transitions. Drag and resize the windows to see how the rectangle-based transitions interact with different window frames.
 
 ## Code Structure
 
-- `main.dart` - Complete example with 3 different styled windows
-- Each window demonstrates different configuration options
-- Shows how to use controllers for programmatic control
-- Demonstrates all available callbacks
+- `lib/main.dart` contains the example app, reusable demo window setup, and animation presets.
+- Each preset configures the public `WindowTransitionStyle` API; no package internals are used by the gallery.

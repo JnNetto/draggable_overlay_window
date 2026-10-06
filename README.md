@@ -7,8 +7,14 @@ A highly customizable, draggable, and resizable overlay window widget for Flutte
 
 ## Features
 
+**New in 1.1.0:** maximize and restore sizing, independent resize axes, optional headerless windows, and configurable open/close/minimize/restore/maximize animations.
+
+**Maximize/Restore** - Fill the enabled axes, then restore the previous window frame<br>
+**Per-action animations** - Configure duration, curve, opacity, scale, and size transitions independently
+
 ✨ **Draggable Windows** - Move windows freely across the screen  
-🔄 **Resizable** - Resize from all edges and corners (optional)  
+🔄 **Resizable** - Resize from all edges and corners, or lock a single axis (width or height)<br>
+🎨 **Optional header** - Drop the title bar and drive close, minimize, and restore from your own widgets<br>
 📦 **Minimize/Restore** - Built-in minimize and restore functionality  
 🎯 **Focus Management** - Automatic z-index management with focus system  
 🎨 **Highly Customizable** - Extensive styling and configuration options  
@@ -23,7 +29,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  draggable_overlay_window: ^1.0.0
+  draggable_overlay_window: ^1.1.0
 ```
 
 Then run:
@@ -124,6 +130,9 @@ DraggableWindowConfig(
   
   // Behavior
   resizable: true,
+  resizeWidth: true, // false locks the width
+  resizeHeight: true, // false locks the height
+  showHeader: true, // false removes the title bar
   enableScrolling: true,
   
   // Divider
@@ -137,6 +146,8 @@ DraggableWindowConfig(
   // Icons
   minimizeIcon: Icons.remove,
   maximizeIcon: Icons.open_in_full,
+  windowMaximizeIcon: Icons.crop_square,
+  windowRestoreIcon: Icons.filter_none,
   closeIcon: Icons.close,
   dragHandleIcon: Icons.drag_handle,
 )
@@ -171,40 +182,153 @@ DraggableOverlayWindow(
 )
 ```
 
+### Resize a single axis
+
+`resizeWidth` and `resizeHeight` are independent. Set one to `false` to keep that side fixed while the other still resizes. Both default to `true`. They only apply when `resizable` is `true`.
+
+Width only:
+
+```dart
+DraggableWindowConfig(
+  resizeWidth: true,
+  resizeHeight: false,
+)
+```
+
+Height only:
+
+```dart
+DraggableWindowConfig(
+  resizeWidth: false,
+  resizeHeight: true,
+)
+```
+
+With a single axis, only the matching edges are draggable (left/right for width, top/bottom for height). Corners appear only when both axes are enabled.
+
+### Headerless window
+
+Set `showHeader: false` to render only the content — a solid color, for example, with no title, close, or minimize bar. The surface itself is draggable. Close, minimize, and restore stay on the controller, so your own buttons can call them:
+
+```dart
+final controller = DraggableWindowController(
+  initialSize: const Size(220, 140),
+);
+
+// Somewhere else in your UI
+ElevatedButton(
+  onPressed: controller.toggleMinimize,
+  child: const Text('Minimize'),
+);
+ElevatedButton(
+  onPressed: controller.hide,
+  child: const Text('Close'),
+);
+
+DraggableOverlayWindow(
+  key: ValueKey(controller.windowId),
+  controller: controller,
+  config: const DraggableWindowConfig(
+    showHeader: false,
+    enableScrolling: false,
+    contentPadding: EdgeInsets.zero,
+    windowBackgroundColor: Color(0xFF00897B),
+    borderWidth: 0,
+    showFocusBorder: false,
+  ),
+  content: const SizedBox.expand(),
+);
+```
+
+Without a header, a minimized window is not drawn. Call `controller.restore()` or `controller.toggleMinimize()` from your button to bring it back.
+
 ## Controller API
 
 The `DraggableWindowController` provides full programmatic control:
 
 ```dart
 final controller = DraggableWindowController(
-  initialPosition: Offset(100, 100),
-  initialSize: Size(400, 300),
+  initialPosition: const Offset(100, 100),
+  initialSize: const Size(400, 300),
 );
 
-// Visibility
 controller.show();
 controller.hide();
 controller.toggle();
-
-// Minimize/Restore
 controller.minimize();
 controller.restore();
-
-// Position & Size
-controller.setPosition(Offset(200, 200));
-controller.setSize(Size(500, 400));
-
-// State
-bool isVisible = controller.isVisible;
-bool isMinimized = controller.isMinimized;
-Offset position = controller.position;
-Size size = controller.size;
-
-// Listen to changes
-controller.addListener(() {
-  print('Window state changed');
-});
+controller.toggleMaximize();
+controller.maximize();
+controller.unmaximize();
 ```
+
+Maximize fills the enabled resize axes and hides their resize handles. Unmaximize restores the saved frame, adjusted to fit the current screen. A minimized window keeps its content mounted; `hide()` closes the window and removes it after its close transition.
+
+The controller also exposes the current state and frame:
+
+```dart
+final bool isVisible = controller.isVisible;
+final bool isMinimized = controller.isMinimized;
+final bool isMaximized = controller.isMaximized;
+final Offset position = controller.position;
+final Size size = controller.size;
+
+controller.setPosition(const Offset(200, 200));
+controller.setSize(const Size(500, 400));
+```
+
+## Animations
+
+Open, close, minimize, restore, maximize, and unmaximize each have their own transition. Dragging and resizing stay immediate.
+
+`WindowTransitionStyle` controls one action:
+
+- `duration` — `Duration.zero` disables that action
+- `curve`
+- `beginOpacity` / `endOpacity`
+- `beginScale` / `endScale`
+- `scaleAlignment` — which point the scale grows from
+- `animateRect` — interpolate position and size (most useful for minimize, restore, maximize, and unmaximize)
+
+```dart
+const DraggableWindowConfig(
+  animations: DraggableWindowAnimations(
+    open: WindowTransitionStyle(
+      duration: Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      beginOpacity: 0,
+      beginScale: 0.92,
+      endScale: 1,
+      animateRect: false,
+    ),
+    close: WindowTransitionStyle(
+      duration: Duration(milliseconds: 180),
+      endOpacity: 0,
+      animateRect: false,
+    ),
+    minimize: WindowTransitionStyle(
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      scaleAlignment: Alignment.topCenter,
+    ),
+    restore: WindowTransitionStyle(
+      duration: Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      scaleAlignment: Alignment.topCenter,
+    ),
+    maximize: WindowTransitionStyle(
+      duration: Duration(milliseconds: 360),
+      curve: Curves.easeInOutCubic,
+    ),
+    unmaximize: WindowTransitionStyle(
+      duration: Duration(milliseconds: 360),
+      curve: Curves.easeInOutCubic,
+    ),
+  ),
+);
+```
+
+Set a transition duration to `Duration.zero` to disable just that action. Use `DraggableWindowAnimations.none` to disable all transitions. The `onClose` callback runs after the close transition finishes.
 
 ## Callbacks
 

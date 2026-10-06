@@ -34,11 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking Changes
 - None (initial release)
 
-## [Unreleased]
+## [1.1.0] - 2026-10-02
 
-### Planned
-- Animation customization (to be implemented in future version with better overflow handling)
-- Window snapping to edges
-- Window grouping/tabbing
-- Keyboard shortcuts
-- Window state persistence
+### Added
+- Independent width and height resizing through `resizeWidth` and `resizeHeight`
+- Headerless windows with `showHeader: false`; visibility and minimize controls remain available through `DraggableWindowController`
+- Maximize and unmaximize actions (`maximize`, `unmaximize`, and `toggleMaximize`) for resizable axes, restoring the previous frame when unmaximized
+- Per-action animations using `DraggableWindowAnimations` and `WindowTransitionStyle` for opening, closing, minimizing, restoring, maximizing, and unmaximizing
+- Animation controls for duration, curve, opacity, scale, scale alignment, and rectangle interpolation
+- Example gallery with fade, zoom, corner zoom, elastic, rectangle, fast, and no-animation presets
+
+### Improved
+- Header actions begin responding on pointer-down for immediate visual feedback
+- Focus management avoids redundant notifications when the focused window is already at the top
+- Close animations continue to completion if a drag or resize gesture overlaps the close action
+
+### Fixed
+- Correct z-order updates when focusing windows in `OverlayWindowStack`
+- Minimized windows preserve their content state until they are closed
+- Close animations are protected from drag and resize gesture interruption
+
+### Compatibility
+- No breaking API changes from 1.0.0
