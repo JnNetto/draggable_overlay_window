@@ -426,207 +426,207 @@ class _HomePageState extends State<HomePage> {
                     );
                   },
                 ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.person),
-                  label: const Text('Perfil (Único)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade100,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Perfil do Usuário',
-                      const UserProfileContent(),
-                      DraggableWindowConfig(
-                        headerBackgroundColor: Colors.blue.shade700,
-                        headerIconColor: Colors.white,
-                        enableScrolling: false,
-                        headerTextStyle: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      initialSize: const Size(350, 500),
-                      tag: 'profile', // Único
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.sticky_note_2),
-                  label: const Text('Nota (Multi)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.yellow.shade100,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Lembrete',
-                      Container(
-                        color: Colors.yellow.shade50,
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Nota Rápida',
-                              style: TextStyle(
-                                fontFamily: 'cursive',
-                                fontSize: 24,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            const Divider(),
-                            const Text('Escreva algo...'),
-                          ],
-                        ),
-                      ),
-                      DraggableWindowConfig(
-                        windowBackgroundColor: Colors.yellow.shade50,
-                        headerBackgroundColor: Colors.yellow.shade700,
-                        borderColor: Colors.yellow.shade900,
-                        dividerColor: Colors.yellow.shade900,
-                        borderRadius: 0,
-                        elevation: 4,
-                      ),
-                      initialSize: const Size(200, 200),
-                      tag: null, // Múltiplas
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.lock),
-                  label: const Text('Aviso (Único)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red.shade100,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Aviso Importante',
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(16.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.warning,
-                                  size: 40, color: Colors.orange),
-                              SizedBox(height: 10),
-                              Text(
-                                'Esta é uma janela de alerta fixa.\nNão pode ser redimensionada.',
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      DraggableWindowConfig(
-                        resizable: false,
-                        borderColor: Colors.red,
-                        headerBackgroundColor: Colors.red,
-                        headerIconColor: Colors.white,
-                        headerTextStyle: const TextStyle(color: Colors.white),
-                      ),
-                      initialSize: const Size(300, 200),
-                      tag: 'alert', // Único
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.swap_horiz),
-                  label: const Text('Só largura'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.teal.shade100,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Só largura',
-                      const Center(
-                        child: Text(
-                          'Arraste as laterais.\nA altura fica fixa.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const DraggableWindowConfig(
-                        resizeHeight: false,
-                        headerBackgroundColor: Colors.teal,
-                        headerIconColor: Colors.white,
-                        headerTextStyle: TextStyle(color: Colors.white),
-                      ),
-                      initialSize: const Size(360, 180),
-                      tag: null,
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.swap_vert),
-                  label: const Text('Só altura'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo.shade100,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Só altura',
-                      const Center(
-                        child: Text(
-                          'Arraste o topo ou a base.\nA largura fica fixa.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const DraggableWindowConfig(
-                        resizeWidth: false,
-                        headerBackgroundColor: Colors.indigo,
-                        headerIconColor: Colors.white,
-                        headerTextStyle: TextStyle(color: Colors.white),
-                      ),
-                      initialSize: const Size(280, 320),
-                      tag: null,
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.music_note),
-                  label: const Text('Player (Único)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
-                  ),
-                  onPressed: () {
-                    _addWindow(
-                      'Now Playing',
-                      Container(
-                        color: Colors.black,
-                        child: Center(
-                          child: Icon(Icons.play_circle_fill,
-                              size: 64,
-                              color: Colors.white.withValues(alpha: 0.8)),
-                        ),
-                      ),
-                      const DraggableWindowConfig(
-                        windowBackgroundColor: Colors.black,
-                        headerBackgroundColor: Colors.black,
-                        headerIconColor: Colors.white,
-                        headerTextStyle: TextStyle(color: Colors.white),
-                        borderColor: Colors.grey,
-                        dividerColor: Colors.grey,
-                      ),
-                      initialSize: const Size(400, 225),
-                      tag: 'player', // Único
-                    );
-                  },
-                ),
-                _ImmediateElevatedButton.icon(
-                  icon: const Icon(Icons.code),
-                  label: const Text('Calc (Único)'),
-                  onPressed: () {
-                    _addWindow(
-                      'Meia Tela',
-                      const Center(child: Text('50% da largura da tela')),
-                      DraggableWindowConfig(
-                        widthCalculator: (screenWidth) => screenWidth * 0.5,
-                        heightCalculator: (screenHeight) => 200,
-                      ),
-                      initialPosition: const Offset(10, 300),
-                      tag: 'calculator', // Único
-                    );
-                  },
-                ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.person),
+                //   label: const Text('Perfil (Único)'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.blue.shade100,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Perfil do Usuário',
+                //       const UserProfileContent(),
+                //       DraggableWindowConfig(
+                //         headerBackgroundColor: Colors.blue.shade700,
+                //         headerIconColor: Colors.white,
+                //         enableScrolling: false,
+                //         headerTextStyle: const TextStyle(
+                //           color: Colors.white,
+                //           fontWeight: FontWeight.bold,
+                //         ),
+                //       ),
+                //       initialSize: const Size(350, 500),
+                //       tag: 'profile', // Único
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.sticky_note_2),
+                //   label: const Text('Nota (Multi)'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.yellow.shade100,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Lembrete',
+                //       Container(
+                //         color: Colors.yellow.shade50,
+                //         padding: const EdgeInsets.all(16),
+                //         child: Column(
+                //           crossAxisAlignment: CrossAxisAlignment.start,
+                //           children: [
+                //             Text(
+                //               'Nota Rápida',
+                //               style: TextStyle(
+                //                 fontFamily: 'cursive',
+                //                 fontSize: 24,
+                //                 color: Colors.grey.shade800,
+                //               ),
+                //             ),
+                //             const Divider(),
+                //             const Text('Escreva algo...'),
+                //           ],
+                //         ),
+                //       ),
+                //       DraggableWindowConfig(
+                //         windowBackgroundColor: Colors.yellow.shade50,
+                //         headerBackgroundColor: Colors.yellow.shade700,
+                //         borderColor: Colors.yellow.shade900,
+                //         dividerColor: Colors.yellow.shade900,
+                //         borderRadius: 0,
+                //         elevation: 4,
+                //       ),
+                //       initialSize: const Size(200, 200),
+                //       tag: null, // Múltiplas
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.lock),
+                //   label: const Text('Aviso (Único)'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.red.shade100,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Aviso Importante',
+                //       const Center(
+                //         child: Padding(
+                //           padding: EdgeInsets.all(16.0),
+                //           child: Column(
+                //             mainAxisAlignment: MainAxisAlignment.center,
+                //             children: [
+                //               Icon(Icons.warning,
+                //                   size: 40, color: Colors.orange),
+                //               SizedBox(height: 10),
+                //               Text(
+                //                 'Esta é uma janela de alerta fixa.\nNão pode ser redimensionada.',
+                //                 textAlign: TextAlign.center,
+                //               ),
+                //             ],
+                //           ),
+                //         ),
+                //       ),
+                //       DraggableWindowConfig(
+                //         resizable: false,
+                //         borderColor: Colors.red,
+                //         headerBackgroundColor: Colors.red,
+                //         headerIconColor: Colors.white,
+                //         headerTextStyle: const TextStyle(color: Colors.white),
+                //       ),
+                //       initialSize: const Size(300, 200),
+                //       tag: 'alert', // Único
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.swap_horiz),
+                //   label: const Text('Só largura'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.teal.shade100,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Só largura',
+                //       const Center(
+                //         child: Text(
+                //           'Arraste as laterais.\nA altura fica fixa.',
+                //           textAlign: TextAlign.center,
+                //         ),
+                //       ),
+                //       const DraggableWindowConfig(
+                //         resizeHeight: false,
+                //         headerBackgroundColor: Colors.teal,
+                //         headerIconColor: Colors.white,
+                //         headerTextStyle: TextStyle(color: Colors.white),
+                //       ),
+                //       initialSize: const Size(360, 180),
+                //       tag: null,
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.swap_vert),
+                //   label: const Text('Só altura'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.indigo.shade100,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Só altura',
+                //       const Center(
+                //         child: Text(
+                //           'Arraste o topo ou a base.\nA largura fica fixa.',
+                //           textAlign: TextAlign.center,
+                //         ),
+                //       ),
+                //       const DraggableWindowConfig(
+                //         resizeWidth: false,
+                //         headerBackgroundColor: Colors.indigo,
+                //         headerIconColor: Colors.white,
+                //         headerTextStyle: TextStyle(color: Colors.white),
+                //       ),
+                //       initialSize: const Size(280, 320),
+                //       tag: null,
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.music_note),
+                //   label: const Text('Player (Único)'),
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: Colors.grey.shade300,
+                //   ),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Now Playing',
+                //       Container(
+                //         color: Colors.black,
+                //         child: Center(
+                //           child: Icon(Icons.play_circle_fill,
+                //               size: 64,
+                //               color: Colors.white.withValues(alpha: 0.8)),
+                //         ),
+                //       ),
+                //       const DraggableWindowConfig(
+                //         windowBackgroundColor: Colors.black,
+                //         headerBackgroundColor: Colors.black,
+                //         headerIconColor: Colors.white,
+                //         headerTextStyle: TextStyle(color: Colors.white),
+                //         borderColor: Colors.grey,
+                //         dividerColor: Colors.grey,
+                //       ),
+                //       initialSize: const Size(400, 225),
+                //       tag: 'player', // Único
+                //     );
+                //   },
+                // ),
+                // _ImmediateElevatedButton.icon(
+                //   icon: const Icon(Icons.code),
+                //   label: const Text('Calc (Único)'),
+                //   onPressed: () {
+                //     _addWindow(
+                //       'Meia Tela',
+                //       const Center(child: Text('50% da largura da tela')),
+                //       DraggableWindowConfig(
+                //         widthCalculator: (screenWidth) => screenWidth * 0.5,
+                //         heightCalculator: (screenHeight) => 200,
+                //       ),
+                //       initialPosition: const Offset(10, 300),
+                //       tag: 'calculator', // Único
+                //     );
+                //   },
+                // ),
                 _ImmediateElevatedButton.icon(
                   icon: const Icon(Icons.rectangle),
                   label: const Text('Painel (só cor)'),
@@ -687,32 +687,6 @@ class _HomePageState extends State<HomePage> {
                     panel?.controller.hide();
                   },
                 ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Text(
-              'Galeria de animações',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Abra cada preset. Depois use minimizar, maximizar e fechar no cabeçalho.',
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final preset in _animationPresets)
-                  _ImmediateElevatedButton.icon(
-                    icon: Icon(preset.icon),
-                    label: Text(preset.name),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: preset.color.withValues(alpha: 0.14),
-                      foregroundColor: preset.color,
-                    ),
-                    onPressed: () => _addAnimationWindow(preset),
-                  ),
               ],
             ),
           ],

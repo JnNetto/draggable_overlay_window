@@ -1,6 +1,6 @@
 name: draggable_overlay_window
 description: A customizable draggable, resizable, minimizable, and maximizable overlay window widget for Flutter, with per-action animations.
-version: 1.1.0
+version: 1.1.1
 homepage: https://github.com/JnNetto/draggable_overlay_window
 repository: https://github.com/JnNetto/draggable_overlay_window
 issue_tracker: https://github.com/JnNetto/draggable_overlay_window/issues

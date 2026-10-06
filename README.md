@@ -5,6 +5,14 @@ A highly customizable, draggable, and resizable overlay window widget for Flutte
 [![pub package](https://img.shields.io/pub/v/draggable_overlay_window.svg)](https://pub.dev/packages/draggable_overlay_window)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Demo
+
+Desktop recordings of the basic window: opening it, dragging it, and resizing it.
+
+<img src="https://raw.githubusercontent.com/JnNetto/draggable_overlay_window/main/assets/videos/desktop-demo-1.gif" alt="Desktop demo of opening, dragging, and resizing a floating window" width="720">
+
+<img src="https://raw.githubusercontent.com/JnNetto/draggable_overlay_window/main/assets/videos/desktop-demo-2.gif" alt="Desktop demo of the floating window controls" width="720">
+
 ## Features
 
 **New in 1.1.0:** maximize and restore sizing, independent resize axes, optional headerless windows, and configurable open/close/minimize/restore/maximize animations.
@@ -29,7 +37,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  draggable_overlay_window: ^1.1.0
+  draggable_overlay_window: ^1.1.1
 ```
 
 Then run:

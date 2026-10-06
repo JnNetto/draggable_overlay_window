@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Breaking Changes
 - None (initial release)
 
+## [1.1.1] - 2026-10-06
+
+### Added
+- Desktop demo recordings in the README for opening, dragging, and resizing a window
+
+### Improved
+- Public API documentation is in English, so IDE hover text for classes, fields, and methods explains each member
+- The example app focuses on the basic window controls; the extra sample windows stay in the source, commented out
+
+### Compatibility
+- No API changes from 1.1.0
+
 ## [1.1.0] - 2026-10-02
 
 ### Added

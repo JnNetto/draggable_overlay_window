@@ -1,54 +1,65 @@
+/// A floating overlay window that can be dragged, resized, minimized,
+/// and maximized.
+///
+/// Place one or more [DraggableOverlayWindow] widgets in an
+/// [OverlayWindowStack]. Drive each window with a [DraggableWindowController]
+/// and tune appearance and motion through [DraggableWindowConfig].
+///
+/// * Drag the header, or the content when the header is hidden.
+/// * Resize from the edges and corners. Width and height can be enabled
+///   independently, or resizing can be turned off.
+/// * Minimize and restore. [DraggableOverlayWindow.onMinimized] and
+///   [DraggableOverlayWindow.onRestored] report those header actions.
+/// * Maximize to the largest allowed size, then restore with a small inset
+///   so the resize edges stay reachable.
+/// * Animate open, close, minimize, restore, maximize, and unmaximize
+///   separately via [DraggableWindowAnimations].
+/// * Hide the window from its header or from the controller.
+/// * Click a window to focus it. [WindowManager] keeps the stacking order.
+/// * The window keeps its state while minimized.
+/// * Each [DraggableOverlayWindow] requires a [Key].
+library;
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// # DraggableOverlayWindow v2.2
-///
-/// Um widget de janela flutuante arrastável, redimensionável e minimizável para Flutter.
-/// Pode ser usado como uma janela de overlay em qualquer aplicação Flutter.
-///
-/// ## Características:
-/// - ✅ Arrastável (drag & drop)
-/// - ✅ Redimensionável (resize handles nos cantos e bordas) - pode ser desabilitado
-/// - ✅ Eixos independentes: só largura, só altura, ou ambos
-/// - ✅ Cabeçalho opcional: a janela pode ser só o conteúdo, sem barra
-/// - ✅ Minimizável com callbacks onMinimized/onRestored
-/// - ✅ Maximizável: ocupa o tamanho máximo e volta com folga para redimensionar
-/// - ✅ Animações por ação (abrir, fechar, minimizar, restaurar, maximizar)
-/// - ✅ Fechável
-/// - ✅ Sistema de foco (z-index) - clique para trazer ao topo
-/// - ✅ Responsivo (adapta-se a diferentes tamanhos de tela)
-/// - ✅ Personalizável (título e ícone opcionais, cores, tamanhos)
-/// - ✅ Mantém estado quando minimizado
-/// - ✅ Key obrigatória para melhor controle do widget
-
 // ============================================================================
-// GERENCIADOR DE JANELAS (para controle de z-index/foco)
+// WINDOW MANAGER (z-order and focus)
 // ============================================================================
 
-/// Gerenciador global de janelas para controlar z-index e foco
+/// Shared registry of overlay windows and their stacking order.
+///
+/// Every visible [DraggableOverlayWindow] registers here. The last id in
+/// [windowStack] is the focused window, and [OverlayWindowStack] paints it
+/// above the others.
+///
+/// This type is a singleton. [WindowManager.new] always returns the same
+/// instance.
 class WindowManager extends ChangeNotifier {
   static final WindowManager _instance = WindowManager._internal();
+
+  /// Returns the shared [WindowManager].
   factory WindowManager() => _instance;
+
   WindowManager._internal();
 
   final List<String> _windowStack = [];
   int _nextId = 0;
 
-  /// Gera um ID único para uma nova janela
+  /// Returns a new unique window id.
   String generateId() {
     return 'window_${_nextId++}';
   }
 
   final Map<String, String> _taggedWindows = {};
 
-  /// Registra uma janela com uma tag opcional (para garantir unicidade)
+  /// Registers [windowId] and notifies listeners when the id is new.
+  ///
+  /// When [tag] is set, [getWindowIdByTag] later returns this id. If [tag]
+  /// already points at another window, it is updated to [windowId].
   void registerWindow(String windowId, {String? tag}) {
     if (tag != null) {
-      if (_taggedWindows.containsKey(tag)) {
-        // Se a tag já existe e aponta para outro ID, atualiza
-        // Mas idealmente, a UI deve verificar antes
-      }
       _taggedWindows[tag] = windowId;
     }
 
@@ -58,19 +69,23 @@ class WindowManager extends ChangeNotifier {
     }
   }
 
-  /// Remove uma janela do gerenciador
+  /// Removes [windowId] and any tag that pointed at it.
+  ///
+  /// Notifies listeners only when [windowId] was registered.
   void unregisterWindow(String windowId) {
     final wasRegistered = _windowStack.remove(windowId);
     _taggedWindows.removeWhere((key, value) => value == windowId);
     if (wasRegistered) notifyListeners();
   }
 
-  /// Verifica se existe uma janela com a tag fornecida
+  /// Returns the window id registered with [tag], or null when [tag] is unused.
   String? getWindowIdByTag(String tag) {
     return _taggedWindows[tag];
   }
 
-  /// Traz uma janela para o topo (foco)
+  /// Moves [windowId] to the top of the stack, making it the focused window.
+  ///
+  /// Does nothing when [windowId] is unknown or already on top.
   void bringToFront(String windowId) {
     if (_windowStack.isNotEmpty && _windowStack.last == windowId) return;
     if (_windowStack.remove(windowId)) {
@@ -79,40 +94,72 @@ class WindowManager extends ChangeNotifier {
     }
   }
 
-  /// Retorna o z-index de uma janela (maior = mais acima)
+  /// Returns the stacking index of [windowId].
+  ///
+  /// Higher values are painted above lower ones. Returns `-1` when
+  /// [windowId] is not registered.
   int getZIndex(String windowId) {
     return _windowStack.indexOf(windowId);
   }
 
-  /// Retorna se a janela está no topo
+  /// Whether [windowId] is the focused window, currently last in the stack.
   bool isOnTop(String windowId) {
     return _windowStack.isNotEmpty && _windowStack.last == windowId;
   }
 
-  /// Lista de todas as janelas ordenadas por z-index
+  /// Window ids from back to front.
+  ///
+  /// The last id is the focused window. The list is unmodifiable.
   List<String> get windowStack => List.unmodifiable(_windowStack);
 }
 
 // ============================================================================
-// ANIMAÇÕES
+// ANIMATIONS
 // ============================================================================
 
-/// Como uma transição de janela se move.
+/// Motion for one window action, such as open, minimize, or maximize.
 ///
-/// [duration] zero desliga essa transição. [beginOpacity]/[endOpacity] e
-/// [beginScale]/[endScale] controlam o fade e o zoom. [animateRect] interpola
-/// posição e tamanho (minimizar, restaurar, maximizar e desmaximizar).
-/// [scaleAlignment] diz de qual canto o zoom cresce.
+/// Use [instant] when that action should not animate. Pass an instance to
+/// [DraggableWindowAnimations] to override a single action.
 class WindowTransitionStyle {
+  /// How long this transition runs.
+  ///
+  /// [Duration.zero] disables the animation.
   final Duration duration;
+
+  /// Easing curve applied while the transition runs.
   final Curve curve;
+
+  /// Opacity at the start, from 0 (invisible) to 1 (opaque).
   final double beginOpacity;
+
+  /// Opacity at the end, from 0 (invisible) to 1 (opaque).
   final double endOpacity;
+
+  /// Scale at the start. `1` is the window's normal size.
   final double beginScale;
+
+  /// Scale at the end. `1` is the window's normal size.
   final double endScale;
+
+  /// Origin the scale animation grows from.
+  ///
+  /// For example, [Alignment.topCenter] makes a minimize animation shrink
+  /// toward the header.
   final Alignment scaleAlignment;
+
+  /// Whether position and size are interpolated.
+  ///
+  /// Turn this on for minimize, restore, maximize, and unmaximize. When
+  /// false, only opacity and scale change.
   final bool animateRect;
 
+  /// Creates a transition.
+  ///
+  /// A [duration] of [Duration.zero] skips the animation. [beginOpacity] and
+  /// [endOpacity] control the fade. [beginScale] and [endScale] control the
+  /// zoom around [scaleAlignment]. [animateRect] also interpolates position
+  /// and size. [curve] eases the whole transition.
   const WindowTransitionStyle({
     this.duration = const Duration(milliseconds: 220),
     this.curve = Curves.easeOutCubic,
@@ -124,18 +171,38 @@ class WindowTransitionStyle {
     this.animateRect = true,
   });
 
+  /// A transition that finishes immediately, with no visible animation.
   static const WindowTransitionStyle instant = WindowTransitionStyle(
     duration: Duration.zero,
   );
 
+  /// Returns a copy with the given properties replaced.
+  ///
+  /// A null argument keeps the current value. Each parameter matches the
+  /// field of the same name.
   WindowTransitionStyle copyWith({
+    /// How long this transition runs. [Duration.zero] disables it.
     Duration? duration,
+
+    /// Easing curve applied while the transition runs.
     Curve? curve,
+
+    /// Opacity at the start, from 0 (invisible) to 1 (opaque).
     double? beginOpacity,
+
+    /// Opacity at the end, from 0 (invisible) to 1 (opaque).
     double? endOpacity,
+
+    /// Scale at the start. `1` is the window's normal size.
     double? beginScale,
+
+    /// Scale at the end. `1` is the window's normal size.
     double? endScale,
+
+    /// Origin the scale animation grows from.
     Alignment? scaleAlignment,
+
+    /// Whether position and size are interpolated.
     bool? animateRect,
   }) {
     return WindowTransitionStyle(
@@ -151,17 +218,34 @@ class WindowTransitionStyle {
   }
 }
 
-/// Animações de abrir, fechar, minimizar, restaurar, maximizar e desmaximizar.
+/// Per-action animations for open, close, minimize, restore, maximize,
+/// and unmaximize.
 ///
-/// Cada ação é um [WindowTransitionStyle] independente.
+/// Each action is an independent [WindowTransitionStyle]. Use [none] to
+/// turn every animation off.
 class DraggableWindowAnimations {
+  /// Transition played when the window becomes visible.
   final WindowTransitionStyle open;
+
+  /// Transition played when the window hides.
   final WindowTransitionStyle close;
+
+  /// Transition played when the window collapses to its header.
   final WindowTransitionStyle minimize;
+
+  /// Transition played when a minimized window expands again.
   final WindowTransitionStyle restore;
+
+  /// Transition played when the window grows to its maximum size.
   final WindowTransitionStyle maximize;
+
+  /// Transition played when the window leaves the maximized state.
   final WindowTransitionStyle unmaximize;
 
+  /// Creates the set of per-action transitions.
+  ///
+  /// Each argument is independent, so one action can be replaced without
+  /// changing the others.
   const DraggableWindowAnimations({
     this.open = const WindowTransitionStyle(
       duration: Duration(milliseconds: 180),
@@ -200,7 +284,7 @@ class DraggableWindowAnimations {
     ),
   });
 
-  /// Nenhuma ação anima.
+  /// Preset where every action finishes immediately.
   static const DraggableWindowAnimations none = DraggableWindowAnimations(
     open: WindowTransitionStyle.instant,
     close: WindowTransitionStyle.instant,
@@ -210,12 +294,26 @@ class DraggableWindowAnimations {
     unmaximize: WindowTransitionStyle.instant,
   );
 
+  /// Returns a copy with the given actions replaced.
+  ///
+  /// A null argument keeps the current transition.
   DraggableWindowAnimations copyWith({
+    /// Transition played when the window becomes visible.
     WindowTransitionStyle? open,
+
+    /// Transition played when the window hides.
     WindowTransitionStyle? close,
+
+    /// Transition played when the window collapses to its header.
     WindowTransitionStyle? minimize,
+
+    /// Transition played when a minimized window expands again.
     WindowTransitionStyle? restore,
+
+    /// Transition played when the window grows to its maximum size.
     WindowTransitionStyle? maximize,
+
+    /// Transition played when the window leaves the maximized state.
     WindowTransitionStyle? unmaximize,
   }) {
     return DraggableWindowAnimations(
@@ -230,97 +328,136 @@ class DraggableWindowAnimations {
 }
 
 // ============================================================================
-// CONFIGURAÇÕES
+// CONFIGURATION
 // ============================================================================
 
-/// Configurações personalizáveis para o DraggableOverlayWindow
+/// Appearance, size limits, header, and animations for a
+/// [DraggableOverlayWindow].
+///
+/// Colors left null follow the current [Theme]. [defaultConfig] is the
+/// standard look and [compactConfig] is a tighter preset. [copyWith] changes
+/// individual fields.
 class DraggableWindowConfig {
-  /// Altura da janela quando minimizada (apenas header)
+  /// Height of the window while it is minimized and [showHeader] is true.
+  ///
+  /// Only the header is visible at this height.
   final double minimizedHeight;
 
-  /// Raio das bordas arredondadas
+  /// Corner radius of the window, in logical pixels.
   final double borderRadius;
 
-  /// Elevação (sombra) da janela
+  /// Shadow elevation while the window is not focused.
   final double elevation;
 
-  /// Elevação quando a janela está em foco
+  /// Shadow elevation while the window is focused.
   final double focusedElevation;
 
-  /// Cor de fundo do cabeçalho
+  /// Header background color.
+  ///
+  /// When null, a theme color is used and it shifts slightly while focused.
   final Color? headerBackgroundColor;
 
-  /// Cor de fundo da janela
+  /// Window background color.
+  ///
+  /// When null, [ThemeData.scaffoldBackgroundColor] is used.
   final Color? windowBackgroundColor;
 
-  /// Cor da borda
+  /// Border color while the window is not focused.
+  ///
+  /// When null, a light grey is used.
   final Color? borderColor;
 
-  /// Cor da borda quando em foco
+  /// Border color while the window is focused.
+  ///
+  /// When null, [ColorScheme.primary] is used.
   final Color? focusedBorderColor;
 
-  /// Se deve habilitar rolagem automática no conteúdo
+  /// Whether the content scrolls when it is taller than the window.
+  ///
+  /// When true, the content is wrapped in a [SingleChildScrollView].
   final bool enableScrolling;
 
-  /// Padding do conteúdo
+  /// Padding around [DraggableOverlayWindow.content].
   final EdgeInsets contentPadding;
 
-  /// Se a janela pode ser redimensionada
+  /// Whether the window can be resized by dragging its edges.
+  ///
+  /// [resizeWidth] and [resizeHeight] choose which axes actually move.
   final bool resizable;
 
-  /// Se a largura pode mudar ao arrastar as bordas.
-  /// Só tem efeito quando [resizable] é true.
+  /// Whether dragging an edge can change the width.
+  ///
+  /// Has no effect when [resizable] is false.
   final bool resizeWidth;
 
-  /// Se a altura pode mudar ao arrastar as bordas.
-  /// Só tem efeito quando [resizable] é true.
+  /// Whether dragging an edge can change the height.
+  ///
+  /// Has no effect when [resizable] is false.
   final bool resizeHeight;
 
-  /// Tamanho da área de arraste para redimensionar
+  /// Thickness, in logical pixels, of the invisible drag strips on the
+  /// edges and corners.
   final double resizeHandleSize;
 
-  /// Largura mínima da janela
+  /// Smallest width the window can be resized to.
   final double minWidth;
 
-  /// Altura mínima da janela
+  /// Smallest height the window can be resized to.
+  ///
+  /// While the header is visible, the window also cannot shrink below
+  /// [minimizedHeight].
   final double minHeight;
 
-  /// Largura máxima da janela (null = sem limite)
+  /// Largest width the window can be resized to.
+  ///
+  /// Null means the screen width is the only limit.
   final double? maxWidth;
 
-  /// Altura máxima da janela (null = sem limite)
+  /// Largest height the window can be resized to.
+  ///
+  /// Null means the screen height is the only limit.
   final double? maxHeight;
 
-  /// Largura inicial da janela
+  /// Width used when the controller does not already have a positive size.
   final double initialWidth;
 
-  /// Altura inicial da janela
+  /// Height used when the controller does not already have a positive size.
   final double initialHeight;
 
-  /// Função para calcular a largura baseada na largura da tela (sobrescreve initialWidth)
+  /// When set, the laid-out width comes from the screen width.
+  ///
+  /// Ignored while the window is maximized. The function receives the
+  /// current screen width and returns the window width.
   final double Function(double screenWidth)? widthCalculator;
 
-  /// Função para calcular a altura baseada na altura da tela (sobrescreve initialHeight)
+  /// When set, the laid-out height comes from the screen height.
+  ///
+  /// Ignored while the window is maximized. The function receives the
+  /// current screen height and returns the window height.
   final double Function(double screenHeight)? heightCalculator;
 
-  /// Ícone do minimizar
+  /// Icon of the button that minimizes the window.
   final IconData minimizeIcon;
 
-  /// Ícone do maximizar/restaurar a partir do estado minimizado
+  /// Icon of the button that restores a minimized window.
   final IconData maximizeIcon;
 
-  /// Ícone do botão que maximiza a janela
+  /// Icon of the button that maximizes the window.
   final IconData windowMaximizeIcon;
 
-  /// Ícone do botão que sai da maximização
+  /// Icon of the button that leaves the maximized state.
   final IconData windowRestoreIcon;
 
-  /// Ícone de fechar
+  /// Icon of the button that hides the window.
   final IconData closeIcon;
 
-  /// Ícone de arrastar
+  /// Icon shown at the start of the header as the drag affordance.
   final IconData dragHandleIcon;
 
+  /// Creates a window configuration.
+  ///
+  /// Omitted colors follow the current [Theme]. See each field for what a
+  /// value controls and which default applies.
   const DraggableWindowConfig({
     this.minimizedHeight = 48.0,
     this.borderRadius = 12.0,
@@ -364,51 +501,80 @@ class DraggableWindowConfig {
     this.animations = const DraggableWindowAnimations(),
   });
 
-  /// Largura da borda
+  /// Border thickness while the window is not focused, in logical pixels.
   final double borderWidth;
 
-  /// Largura da borda quando em foco
+  /// Border thickness while the window is focused, in logical pixels.
+  ///
+  /// When null, or when [showFocusBorder] is false, [borderWidth] is used.
   final double? focusedBorderWidth;
 
-  /// Se deve mostrar a borda de foco
+  /// Whether the focused window uses [focusedBorderColor] and
+  /// [focusedBorderWidth].
+  ///
+  /// When false, the unfocused border color and [borderWidth] stay in place.
   final bool showFocusBorder;
 
-  /// Altura (espessura) do divisor
+  /// Thickness of the divider between the header and the content.
   final double dividerHeight;
 
-  /// Se deve mostrar o divisor
+  /// Whether the divider between the header and the content is drawn.
+  ///
+  /// Has no effect when [showHeader] is false.
   final bool showDivider;
 
-  /// Se deve mostrar a barra superior (título, arraste, minimizar e fechar).
-  /// Com false, a janela é só o conteúdo. Fechar, minimizar e restaurar
-  /// continuam disponíveis no [DraggableWindowController].
+  /// Whether the top bar is shown.
+  ///
+  /// The bar holds the title, the drag handle, and the minimize, maximize,
+  /// and close buttons. When false, the window is only its content and the
+  /// content itself can be dragged. Closing, minimizing, and restoring remain
+  /// available on [DraggableWindowController].
   final bool showHeader;
 
-  /// Se o botão de maximizar faz sentido para esta configuração.
+  /// Whether a maximize button is meaningful for this configuration.
+  ///
+  /// True when [resizable] is true and at least one of [resizeWidth] or
+  /// [resizeHeight] is true.
   bool get canMaximize => resizable && (resizeWidth || resizeHeight);
 
-  /// Cor do divisor
+  /// Color of the divider between the header and the content.
+  ///
+  /// When null, a faded border color is used.
   final Color? dividerColor;
 
-  /// Padding do conteúdo do header
+  /// Padding inside the header.
+  ///
+  /// When null, 12 logical pixels of horizontal padding are used.
   final EdgeInsets? headerPadding;
 
-  /// Cor dos ícones do header
+  /// Color of the drag handle and the optional header icon.
+  ///
+  /// When null, the icon uses the theme color, and [ColorScheme.primary]
+  /// while the window is focused.
   final Color? headerIconColor;
 
-  /// Cor dos botões do header
+  /// Color of the minimize, maximize, and restore buttons.
+  ///
+  /// When null, [headerIconColor] is used. The close button stays red.
   final Color? headerButtonsColor;
 
-  /// Estilo do texto do header
+  /// Text style of the header title.
+  ///
+  /// When null, the theme's title style is used, and it becomes bolder
+  /// while the window is focused.
   final TextStyle? headerTextStyle;
 
-  /// Animações de abrir, fechar, minimizar, restaurar, maximizar e desmaximizar.
+  /// Animations for open, close, minimize, restore, maximize, and unmaximize.
   final DraggableWindowAnimations animations;
 
-  /// Configuração padrão
+  /// Standard configuration, equal to [DraggableWindowConfig.new] with no
+  /// arguments.
   static const DraggableWindowConfig defaultConfig = DraggableWindowConfig();
 
-  /// Configuração compacta para telas menores
+  /// Tighter configuration for smaller screens.
+  ///
+  /// Uses a shorter header, smaller corners, less elevation, and smaller
+  /// minimum and initial sizes than [defaultConfig].
   static const DraggableWindowConfig compactConfig = DraggableWindowConfig(
     minimizedHeight: 40.0,
     borderRadius: 8.0,
@@ -421,47 +587,130 @@ class DraggableWindowConfig {
     initialHeight: 250.0,
   );
 
-  /// Cria uma cópia com valores alterados
+  /// Returns a copy with the given fields replaced.
+  ///
+  /// A null argument keeps the current value, so this cannot clear a color,
+  /// calculator, or text style back to null. Each parameter matches the field
+  /// of the same name.
   DraggableWindowConfig copyWith({
+    /// Height of the minimized window when the header is visible.
     double? minimizedHeight,
+
+    /// Corner radius of the window, in logical pixels.
     double? borderRadius,
+
+    /// Shadow elevation while the window is not focused.
     double? elevation,
+
+    /// Shadow elevation while the window is focused.
     double? focusedElevation,
+
+    /// Header background color. Null keeps the current color.
     Color? headerBackgroundColor,
+
+    /// Window background color. Null keeps the current color.
     Color? windowBackgroundColor,
+
+    /// Border color while the window is not focused. Null keeps the current color.
     Color? borderColor,
+
+    /// Border color while the window is focused. Null keeps the current color.
     Color? focusedBorderColor,
+
+    /// Whether the content scrolls when it is taller than the window.
     bool? enableScrolling,
+
+    /// Padding around the window content.
     EdgeInsets? contentPadding,
+
+    /// Whether the window can be resized by dragging its edges.
     bool? resizable,
+
+    /// Whether dragging an edge can change the width.
     bool? resizeWidth,
+
+    /// Whether dragging an edge can change the height.
     bool? resizeHeight,
+
+    /// Thickness of the invisible drag strips on the edges and corners.
     double? resizeHandleSize,
+
+    /// Smallest width the window can be resized to.
     double? minWidth,
+
+    /// Smallest height the window can be resized to.
     double? minHeight,
+
+    /// Largest width the window can be resized to. Null keeps the current limit.
     double? maxWidth,
+
+    /// Largest height the window can be resized to. Null keeps the current limit.
     double? maxHeight,
+
+    /// Width used when the controller does not already have a positive size.
     double? initialWidth,
+
+    /// Height used when the controller does not already have a positive size.
     double? initialHeight,
+
+    /// Function that sets the width from the screen width. Null keeps the current function.
     double Function(double screenWidth)? widthCalculator,
+
+    /// Function that sets the height from the screen height. Null keeps the current function.
     double Function(double screenHeight)? heightCalculator,
+
+    /// Icon of the button that minimizes the window.
     IconData? minimizeIcon,
+
+    /// Icon of the button that restores a minimized window.
     IconData? maximizeIcon,
+
+    /// Icon of the button that maximizes the window.
     IconData? windowMaximizeIcon,
+
+    /// Icon of the button that leaves the maximized state.
     IconData? windowRestoreIcon,
+
+    /// Icon of the button that hides the window.
     IconData? closeIcon,
+
+    /// Icon shown at the start of the header as the drag affordance.
     IconData? dragHandleIcon,
+
+    /// Border thickness while the window is not focused.
     double? borderWidth,
+
+    /// Border thickness while focused. Null keeps the current value.
     double? focusedBorderWidth,
+
+    /// Whether the focused window uses the focus border color and width.
     bool? showFocusBorder,
+
+    /// Thickness of the divider between the header and the content.
     double? dividerHeight,
+
+    /// Whether the divider between the header and the content is drawn.
     bool? showDivider,
+
+    /// Whether the top bar is shown.
     bool? showHeader,
+
+    /// Color of the divider between the header and the content.
     Color? dividerColor,
+
+    /// Padding inside the header. Null keeps the current padding.
     EdgeInsets? headerPadding,
+
+    /// Color of the drag handle and the optional header icon.
     Color? headerIconColor,
+
+    /// Color of the minimize, maximize, and restore buttons.
     Color? headerButtonsColor,
+
+    /// Text style of the header title. Null keeps the current style.
     TextStyle? headerTextStyle,
+
+    /// Animations for open, close, minimize, restore, maximize, and unmaximize.
     DraggableWindowAnimations? animations,
   }) {
     return DraggableWindowConfig(
@@ -514,7 +763,14 @@ class DraggableWindowConfig {
 // ============================================================================
 // CONTROLLER
 // ============================================================================
-/// Controller para controlar o DraggableOverlayWindow programaticamente
+
+/// Programmatic control for one [DraggableOverlayWindow].
+///
+/// Call [show], [hide], [minimize], [restore], [maximize], and [unmaximize]
+/// from application code. The widget listens and animates the change.
+///
+/// Pass the same [tag] to [DraggableWindowController.new] to reuse one
+/// controller. [dispose] removes that tagged instance.
 class DraggableWindowController extends ChangeNotifier {
   static final Map<String, DraggableWindowController> _instances = {};
 
@@ -528,11 +784,21 @@ class DraggableWindowController extends ChangeNotifier {
   final String _windowId;
   final String? _tag;
 
-  /// Construtor Factory
-  /// Se [tag] for fornecido e já existir uma instância, retorna a existente.
+  /// Creates a controller, or returns the one already stored for [tag].
+  ///
+  /// [initialSize] and [initialPosition] apply only when this call creates
+  /// a new controller. If [tag] matches an existing controller, that instance
+  /// is returned and the other arguments are ignored.
   factory DraggableWindowController({
+    /// Size stored when this call creates a new controller.
     Size initialSize = const Size(400, 350),
+
+    /// Top-left position stored when this call creates a new controller.
     Offset initialPosition = const Offset(80, 100),
+
+    /// Optional identity that makes this controller a singleton.
+    ///
+    /// A later call with the same tag returns the existing controller.
     String? tag,
   }) {
     if (tag != null && _instances.containsKey(tag)) {
@@ -561,28 +827,36 @@ class DraggableWindowController extends ChangeNotifier {
         _windowId = WindowManager().generateId(),
         _tag = tag;
 
-  /// ID único da janela
+  /// Unique id of this window, assigned when the controller is created.
   String get windowId => _windowId;
 
-  /// Se a janela está visível
+  /// Whether the window is shown.
+  ///
+  /// False until [show] is called, and false again after [hide].
   bool get isVisible => _isVisible;
 
-  /// Se a janela está minimizada
+  /// Whether the window is collapsed to its header.
   bool get isMinimized => _isMinimized;
 
-  /// Se a janela está maximizada
+  /// Whether the window is expanded to its maximum size.
   bool get isMaximized => _isMaximized;
 
-  /// Posição atual da janela
+  /// Current top-left position of the window.
   Offset get position => _position;
 
-  /// Tamanho atual da janela
+  /// Current width and height of the window.
+  ///
+  /// While minimized, the painted height is
+  /// [DraggableWindowConfig.minimizedHeight] and this size is the restored
+  /// size.
   Size get size => _size;
 
-  /// Se a janela está em foco (no topo)
+  /// Whether this window is the focused one, painted above the others.
   bool get isFocused => WindowManager().isOnTop(_windowId);
 
-  /// Mostra a janela
+  /// Shows the window, expands it if it was minimized, and focuses it.
+  ///
+  /// Does nothing when the window is already visible.
   void show() {
     if (!_isVisible) {
       _isVisible = true;
@@ -593,7 +867,10 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Esconde a janela
+  /// Hides the window and removes it from the stacking order.
+  ///
+  /// Does nothing when the window is already hidden. Minimized and maximized
+  /// flags are left as they are.
   void hide() {
     if (_isVisible) {
       _isVisible = false;
@@ -602,7 +879,7 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Alterna visibilidade
+  /// Hides the window when it is visible, or shows it when it is hidden.
   void toggle() {
     if (_isVisible) {
       hide();
@@ -611,7 +888,11 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Minimiza a janela
+  /// Collapses a visible window to its header.
+  ///
+  /// Does nothing when the window is hidden or already minimized. This does
+  /// not call [DraggableOverlayWindow.onMinimized]; that callback belongs to
+  /// the header buttons.
   void minimize() {
     if (_isVisible && !_isMinimized) {
       _isMinimized = true;
@@ -619,7 +900,11 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Restaura a janela minimizada
+  /// Expands a minimized window back to [size].
+  ///
+  /// Does nothing when the window is hidden or not minimized. This does not
+  /// leave the maximized state, and it does not call
+  /// [DraggableOverlayWindow.onRestored].
   void restore() {
     if (_isVisible && _isMinimized) {
       _isMinimized = false;
@@ -627,8 +912,10 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Ocupa a largura e a altura máximas nos eixos redimensionáveis.
-  /// Se estiver minimizada, também restaura.
+  /// Expands the window to the maximum size on each resizable axis.
+  ///
+  /// Also expands the window when it is minimized. Does nothing when the
+  /// window is hidden or already maximized.
   void maximize() {
     if (!_isVisible || _isMaximized) return;
     _isMinimized = false;
@@ -636,15 +923,18 @@ class DraggableWindowController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sai da maximização. O widget devolve o tamanho anterior e, se ele
-  /// estiver colado no máximo, reduz um pouco para sobrar borda de resize.
+  /// Leaves the maximized state.
+  ///
+  /// The widget restores the size from before [maximize]. If that size is
+  /// still flush with the maximum, it shrinks slightly so a resize edge
+  /// remains. Does nothing when the window is not maximized.
   void unmaximize() {
     if (!_isMaximized) return;
     _isMaximized = false;
     notifyListeners();
   }
 
-  /// Alterna entre maximizado e o tamanho anterior
+  /// Maximizes the window, or leaves the maximized state if it already is.
   void toggleMaximize() {
     if (_isMaximized) {
       unmaximize();
@@ -663,7 +953,7 @@ class DraggableWindowController extends ChangeNotifier {
     _restoreSize = null;
   }
 
-  /// Alterna estado minimizado
+  /// Minimizes a visible window, or restores it when it is already minimized.
   void toggleMinimize() {
     if (_isVisible) {
       _isMinimized = !_isMinimized;
@@ -671,12 +961,14 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Traz a janela para o topo (foco)
+  /// Focuses this window and paints it above the others.
   void bringToFront() {
     WindowManager().bringToFront(_windowId);
   }
 
-  /// Define a posição da janela
+  /// Moves the window to [newPosition] and notifies listeners.
+  ///
+  /// Does nothing when [newPosition] is already the current [position].
   void setPosition(Offset newPosition) {
     if (_position != newPosition) {
       _position = newPosition;
@@ -684,7 +976,9 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Define o tamanho da janela
+  /// Resizes the window to [newSize] and notifies listeners.
+  ///
+  /// Does nothing when [newSize] is already the current [size].
   void setSize(Size newSize) {
     if (_size != newSize) {
       _size = newSize;
@@ -692,12 +986,22 @@ class DraggableWindowController extends ChangeNotifier {
     }
   }
 
-  /// Define posição e tamanho sem notificar (usado na inicialização)
-  void setInitialState({Offset? position, Size? size}) {
+  /// Sets [position] and [size] without notifying listeners.
+  ///
+  /// Used while the window is being created, before the first frame. A null
+  /// argument leaves that value unchanged.
+  void setInitialState({
+    /// Top-left position to store. Null leaves [position] unchanged.
+    Offset? position,
+
+    /// Size to store. Null leaves [size] unchanged.
+    Size? size,
+  }) {
     if (position != null) _position = position;
     if (size != null) _size = size;
   }
 
+  /// Unregisters the window, drops a tagged instance, and releases listeners.
   @override
   void dispose() {
     WindowManager().unregisterWindow(_windowId);
@@ -709,10 +1013,10 @@ class DraggableWindowController extends ChangeNotifier {
 }
 
 // ============================================================================
-// ENUMS
+// PRIVATE TYPES
 // ============================================================================
 
-/// Direção de redimensionamento
+/// Edge or corner being dragged while the window is resized.
 enum _ResizeDirection {
   topLeft,
   top,
@@ -725,44 +1029,70 @@ enum _ResizeDirection {
 }
 
 // ============================================================================
-// WIDGET PRINCIPAL
+// MAIN WIDGET
 // ============================================================================
 
-/// Widget de janela flutuante arrastável e redimensionável
+/// A floating window that can be dragged, resized, minimized, and maximized.
+///
+/// Place it in an [OverlayWindowStack] and drive it with [controller].
+/// [content] stays mounted while the window is minimized, so its state is
+/// kept. [config] controls appearance, limits, the header, and animations.
+///
+/// [key] is required. The stack reorders windows by focus, and the key keeps
+/// each window's state.
 class DraggableOverlayWindow extends StatefulWidget {
-  /// Controller para controle programático
+  /// Controller that shows, hides, moves, and resizes this window.
   final DraggableWindowController controller;
 
-  /// Título exibido no cabeçalho (opcional)
+  /// Title drawn in the header.
+  ///
+  /// Nothing is drawn for the title when this is null, or when
+  /// [DraggableWindowConfig.showHeader] is false.
   final String? title;
 
-  /// Ícone exibido no cabeçalho (opcional)
+  /// Icon drawn in the header, before [title].
+  ///
+  /// Nothing is drawn when this is null, or when the header is hidden.
   final IconData? icon;
 
-  /// Conteúdo da janela
+  /// Body of the window.
+  ///
+  /// Stays in the tree while the window is minimized.
   final Widget content;
 
-  /// Configurações personalizadas
+  /// Appearance, size limits, header, and animations.
   final DraggableWindowConfig config;
 
-  /// Callback quando a janela ganha foco
+  /// Called when the user focuses this window.
+  ///
+  /// Fired on tap, when a drag starts, and when a resize starts.
   final VoidCallback? onFocus;
 
-  /// Callback quando a janela é fechada
+  /// Called after the close animation finishes and the window is hidden.
   final VoidCallback? onClose;
 
-  /// Callback quando a janela é minimizada
+  /// Called when the header minimizes the window.
+  ///
+  /// [DraggableWindowController.minimize] does not call this.
   final VoidCallback? onMinimized;
 
-  /// Callback quando a janela é restaurada (maximizada)
+  /// Called when the header restores the window from the minimized state.
+  ///
+  /// [DraggableWindowController.restore] does not call this. Leaving the
+  /// maximized state does not call this either.
   final VoidCallback? onRestored;
 
-  /// Callback quando a posição muda
+  /// Called with the new top-left offset after a drag, resize, or animation
+  /// commits a new position.
   final ValueChanged<Offset>? onPositionChanged;
 
-  /// Callback quando o tamanho muda
+  /// Called with the new size after a resize or animation commits a new size.
   final ValueChanged<Size>? onSizeChanged;
 
+  /// Creates an overlay window controlled by [controller].
+  ///
+  /// [key] is required so [OverlayWindowStack] can reorder windows without
+  /// disposing [content]. [config] defaults to [DraggableWindowConfig.new].
   const DraggableOverlayWindow({
     required Key key,
     required this.controller,
@@ -805,7 +1135,8 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
   double _restOpacity = 1;
   double _restScale = 1;
 
-  /// Folga mínima, em cada lado, ao sair de uma janela colada no máximo.
+  /// Minimum gap, on each side, when leaving a window that is flush with
+  /// the maximum size.
   static const double _restoreInset = 24;
 
   DraggableWindowController get _controller => widget.controller;
@@ -854,7 +1185,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
   }
 
   void _initializeSize() {
-    // Usa o tamanho do controller se já definido, senão usa o config
+    // Use the controller size when it is already set; otherwise use the config.
     if (_controller.size.width > 0 && _controller.size.height > 0) {
       _currentSize = _controller.size;
     } else {
@@ -1227,7 +1558,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
     if (_closing || _controller.isMaximized) return;
     final screenSize = MediaQuery.of(context).size;
     final width = _calculateWidth(context);
-    // Usar minimizedHeight quando minimizado
+    // Use minimizedHeight while the window is minimized.
     final height = _controller.isMinimized
         ? widget.config.minimizedHeight
         : _calculateHeight(context);
@@ -1262,7 +1593,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
     final dx = details.delta.dx;
     final dy = details.delta.dy;
 
-    // Posição e tamanho atuais
+    // Current position and size.
     double left = _currentPosition.dx;
     double top = _currentPosition.dy;
     double width = _currentSize.width;
@@ -1273,7 +1604,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
         case _ResizeDirection.left:
         case _ResizeDirection.topLeft:
         case _ResizeDirection.bottomLeft:
-          // Ao redimensionar pela esquerda, mover a borda esquerda
+          // Dragging the left edge moves the left edge.
           left += dx;
           width -= dx;
           break;
@@ -1292,7 +1623,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
         case _ResizeDirection.top:
         case _ResizeDirection.topLeft:
         case _ResizeDirection.topRight:
-          // Ao redimensionar pelo topo, mover a borda superior
+          // Dragging the top edge moves the top edge.
           top += dy;
           height -= dy;
           break;
@@ -1306,13 +1637,13 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       }
     }
 
-    // Aplicar limites de tamanho mínimo
+    // Apply the minimum size.
     if (allowWidth && width < config.minWidth) {
       if (direction == _ResizeDirection.left ||
           direction == _ResizeDirection.topLeft ||
           direction == _ResizeDirection.bottomLeft) {
-        // Se estamos redimensionando pela esquerda e atingimos o mínimo,
-        // ajustar a posição left para manter o tamanho mínimo
+        // When the left edge hits the minimum width, keep that width
+        // by adjusting the left position.
         left = _currentPosition.dx + (_currentSize.width - config.minWidth);
       }
       width = config.minWidth;
@@ -1322,14 +1653,14 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       if (direction == _ResizeDirection.top ||
           direction == _ResizeDirection.topLeft ||
           direction == _ResizeDirection.topRight) {
-        // Se estamos redimensionando pelo topo e atingimos o mínimo,
-        // ajustar a posição top para manter o tamanho mínimo
+        // When the top edge hits the minimum height, keep that height
+        // by adjusting the top position.
         top = _currentPosition.dy + (_currentSize.height - config.minHeight);
       }
       height = config.minHeight;
     }
 
-    // Aplicar limites de tamanho máximo
+    // Apply the maximum size.
     final maxW = config.maxWidth ?? screenSize.width;
     final maxH = config.maxHeight ?? screenSize.height;
 
@@ -1351,7 +1682,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       height = maxH;
     }
 
-    // Garantir que não saia da tela
+    // Keep the window inside the screen.
     if (allowWidth && left < 0) {
       width += left;
       left = 0;
@@ -1361,7 +1692,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       top = 0;
     }
 
-    // Garantir que a borda direita não ultrapasse a tela
+    // Keep the right edge inside the screen.
     if (allowWidth && left + width > screenSize.width) {
       if (direction == _ResizeDirection.left ||
           direction == _ResizeDirection.topLeft ||
@@ -1376,7 +1707,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       }
     }
 
-    // Garantir que a borda inferior não ultrapasse a tela
+    // Keep the bottom edge inside the screen.
     if (allowHeight && top + height > screenSize.height) {
       if (direction == _ResizeDirection.top ||
           direction == _ResizeDirection.topLeft ||
@@ -1391,7 +1722,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       }
     }
 
-    // O eixo desligado permanece exatamente como estava.
+    // A disabled axis stays exactly as it was.
     if (!allowWidth) {
       left = _currentPosition.dx;
       width = _currentSize.width;
@@ -1401,7 +1732,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
       height = _currentSize.height;
     }
 
-    // Atualizar estado
+    // Update state.
     final newPosition = Offset(left, top);
     final newSize = Size(width, height);
 
@@ -1424,20 +1755,20 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
 
     final isMinimized = _controller.isMinimized;
     final animating = _motion.isAnimating;
-    // Enquanto a altura anima, o conteúdo continua visível e é cortado.
+    // While the height animates, the content stays visible and is clipped.
     final showMinimizedChrome = isMinimized && !animating;
     final isFocused = _windowManager.isOnTop(_controller.windowId);
     final config = widget.config;
-    // Com barra, a janela não fica menor que o cabeçalho.
-    // Sem barra, o piso é só minHeight.
+    // With a header, the window cannot shrink below the header.
+    // Without a header, the floor is only minHeight.
     var heightFloor = config.minHeight;
     if (config.showHeader) {
       final chrome = config.minimizedHeight +
           (config.showDivider ? config.dividerHeight : 0);
       if (chrome > heightFloor) heightFloor = chrome;
     }
-    // Altura real do conteúdo. No minimizar a janela encolhe,
-    // mas o miolo continua com esse tamanho para o State não ser recriado.
+    // Real content height. Minimizing shrinks the window, but the body keeps
+    // this size so its State is not recreated.
     final fullHeight =
         _calculateHeight(context).clamp(heightFloor, double.infinity);
     final paint = animating ? _paintedRect() : null;
@@ -1470,9 +1801,9 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
           )
         : BorderRadius.circular(config.borderRadius);
 
-    // Uso de Align + Transform evita erros de ParentData no Stack
-    // e garante que a origem seja (0,0) para o offset funcionar corretamente.
-    // Offstage na raiz só esconde a janela sem barra: o filho permanece montado.
+    // Align + Transform avoids ParentData errors inside the Stack
+    // and keeps the origin at (0, 0) so the offset is applied correctly.
+    // Offstage at the root only hides a headerless window: the child stays mounted.
     final opacity = _paintedOpacity().clamp(0.0, 1.0);
     final scale = _paintedScale() < 0 ? 0.0 : _paintedScale();
     return Offstage(
@@ -1497,7 +1828,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
                         ? theme.colorScheme.primary.withValues(alpha: 0.3)
                         : null,
                     child: AnimatedContainer(
-                      // Sem animação para evitar problemas de overflow
+                      // No size animation here; it avoids overflow while minimizing.
                       duration: Duration.zero,
                       curve: Curves.linear,
                       width: width,
@@ -1507,8 +1838,8 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
                         borderRadius: borderRadius,
                         border: Border.all(
                           color: borderColor,
-                          // Se focusedBorderWidth não for definido, usa borderWidth
-                          // Se showFocusBorder for false, usa borderWidth
+                          // Fall back to borderWidth when focusedBorderWidth is null
+                          // or showFocusBorder is false.
                           width: (isFocused && config.showFocusBorder)
                               ? (config.focusedBorderWidth ??
                                   config.borderWidth)
@@ -1525,8 +1856,8 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
                       clipBehavior: Clip.antiAlias,
                       child: Stack(
                         children: [
-                          // Mesmo lugar na árvore aberto ou minimizado, para o State
-                          // do conteúdo (texto, rolagem, etc.) sobreviver.
+                          // Same place in the tree whether open or minimized, so the
+                          // content State (text, scroll position, and so on) survives.
                           Positioned(
                             key: const ValueKey('draggable-overlay-body'),
                             top: headerHeight + dividerHeight,
@@ -1576,7 +1907,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
                               ),
                             ),
 
-                          // Resize handles (apenas se não estiver minimizado e resizable)
+                          // Resize handles, only while expanded and resizable.
                           if (!showMinimizedChrome &&
                               !_controller.isMaximized &&
                               config.resizable &&
@@ -1601,8 +1932,8 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
     final cornerSize = handleSize * 2;
     final allowWidth = config.resizeWidth;
     final allowHeight = config.resizeHeight;
-    // Com os dois eixos, os cantos ocupam as pontas. Com um eixo só,
-    // a borda livre cobre o lado inteiro.
+    // With both axes, the corners sit on the ends. With one axis,
+    // the free edge covers the whole side.
     final horizontalInset = allowWidth ? cornerSize : 0.0;
     final verticalInset = allowHeight ? cornerSize : 0.0;
     final handles = <Widget>[];
@@ -1728,8 +2059,8 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
         onPanEnd: (_) => _interacting = false,
         onPanCancel: () => _interacting = false,
         behavior: HitTestBehavior
-            .opaque, // MUDANÇA CRÍTICA: de translucent para opaque
-        // Isso impede que o gesto "vaze" para o GestureDetector pai
+            .opaque, // Keep the gesture from passing through to the parent.
+        // This stops the gesture from leaking to the parent GestureDetector.
         child: Container(color: Colors.transparent),
       ),
     );
@@ -1757,7 +2088,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
 
     if (!draggable) return clipped;
 
-    // Sem a barra, o próprio conteúdo é a área de arraste.
+    // Without a header, the content itself is the drag area.
     return MouseRegion(
       cursor: SystemMouseCursors.grab,
       child: GestureDetector(
@@ -1805,7 +2136,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
         }
       },
       child: Container(
-        // Quando expandHeight é true, não definir altura fixa (deixa o Expanded controlar)
+        // When expandHeight is true, leave the height unset so Expanded controls it.
         height: expandHeight ? null : config.minimizedHeight,
         padding: padding,
         decoration: BoxDecoration(
@@ -1869,7 +2200,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
           tooltip: 'Fechar',
           onTap: _controller.hide,
           isClose: true,
-          color: null, // Fecha sempre tem cor propria ou usa padrao
+          color: null, // The close button uses its own red, or the default.
           isFocused: isFocused,
         ),
       ],
@@ -1879,7 +2210,7 @@ class _DraggableOverlayWindowState extends State<DraggableOverlayWindow>
   Widget _buildExpandedHeader(ThemeData theme, bool isFocused) {
     final defaultIconColor = isFocused ? theme.colorScheme.primary : null;
     final iconColor = widget.config.headerIconColor ?? defaultIconColor;
-    // Para Expanded, usa a cor definida
+    // The expanded header uses the configured color.
 
     return Row(
       children: [
@@ -2056,18 +2387,24 @@ class _ImmediateTapActionState extends State<_ImmediateTapAction> {
 }
 
 // ============================================================================
-// WIDGET CONTAINER (para gerenciar múltiplas janelas com z-index correto)
+// WINDOW STACK
 // ============================================================================
 
-/// Container que gerencia múltiplas janelas com z-index automático.
-/// A janela focada é pintada por último e fica por cima das outras.
+/// Stack that paints [windows] in [WindowManager] order.
+///
+/// The focused window is painted last, so it appears above the others.
+/// [child] is painted behind every window and expands to fill the stack.
+///
+/// Give each [DraggableOverlayWindow] its own [Key]. This stack reorders the
+/// same widget instances, and the key keeps their state.
 class OverlayWindowStack extends StatefulWidget {
-  /// Lista de janelas a serem exibidas
+  /// Windows to show, drawn from back to front according to focus.
   final List<DraggableOverlayWindow> windows;
 
-  /// Conteúdo principal (abaixo das janelas)
+  /// Widget painted behind the windows, usually the page content.
   final Widget? child;
 
+  /// Creates a stack for [windows], with an optional background [child].
   const OverlayWindowStack({super.key, required this.windows, this.child});
 
   @override
@@ -2095,13 +2432,13 @@ class _OverlayWindowStackState extends State<OverlayWindowStack> {
 
   @override
   Widget build(BuildContext context) {
-    // Índice maior = desenhada por último = por cima.
+    // A higher index is painted later, so it appears on top.
     final stackOrder = <String, int>{};
     for (int i = 0; i < _windowManager.windowStack.length; i++) {
       stackOrder[_windowManager.windowStack[i]] = i;
     }
 
-    // Ordenar as janelas pelo z-index MAS manteremos a mesma key
+    // Sort by z-index while keeping each window's key.
     final sortedWindows = List<DraggableOverlayWindow>.from(widget.windows);
     sortedWindows.sort((a, b) {
       final zIndexA = stackOrder[a.controller.windowId] ?? -1;
@@ -2113,7 +2450,7 @@ class _OverlayWindowStackState extends State<OverlayWindowStack> {
       child: Stack(
         children: [
           if (widget.child != null) Positioned.fill(child: widget.child!),
-          // CORREÇÃO: As janelas devem ter keys atribuídas na criação
+          // Windows need the keys assigned where they are created.
           ...sortedWindows,
         ],
       ),
